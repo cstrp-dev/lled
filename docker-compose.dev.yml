@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: ll_postgres_dev
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - ll_network
+
+  pgweb:
+    image: sosedoff/pgweb:latest
+    container_name: ll_pgweb_dev
+    ports:
+      - "8083:8081"
+    environment:
+      PGWEB_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ll_network
+
+networks:
+  ll_network:
+    driver: bridge
+
+volumes:
+  postgres_dev_data:

@@ -1,0 +1,92 @@
+services:
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: ll_postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - ll_network
+
+  lls:
+    build:
+      context: ./ll_server
+      dockerfile: Dockerfile
+    container_name: lls
+    ports:
+      - "3001:3000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ll_network
+    volumes:
+      - ./ll_server/prisma/migrations:/app/prisma/migrations:ro
+
+  llc:
+    build:
+      context: ./ll_client
+      dockerfile: Dockerfile
+    container_name: ll_client
+    ports:
+      - "8082:80"
+    depends_on:
+      - lls
+    restart: unless-stopped
+    networks:
+      - ll_network
+
+  pgweb:
+    image: sosedoff/pgweb:latest
+    container_name: ll_pgweb
+    ports:
+      - "8083:8081"
+    environment:
+      PGWEB_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ll_network
+
+  traefik:
+    image: traefik:v3.0
+    container_name: ll_traefik
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:8080"
+    ports:
+      - "8084:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    networks:
+      - ll_network
+    profiles:
+      - traefik
+
+
+networks:
+  ll_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
